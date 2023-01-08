@@ -19,6 +19,9 @@ enum Sections:Int{
 
 class HomeViewController: UIViewController {
     
+    private var randomTrendingMovie: Title?
+    private var headerView: HeroHeaderUIView?
+    
     let sectionTitles:[String] = ["trending Movies","Trending TV","Popular","Upcoming Movies","Top Rated"]
     
     private let homeFeedTable : UITableView = {
@@ -39,7 +42,22 @@ class HomeViewController: UIViewController {
         
         let headerView = HeroHeaderUIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 500))
         homeFeedTable.tableHeaderView = headerView
+        configureHeroHeaderView()
         
+    }
+    
+    private func configureHeroHeaderView() {
+        APICaller.shared.getTrendingMovies { [weak self] result in
+            switch result {
+            case .success(let titles):
+                let selectedTitle = titles.randomElement()
+                
+                self?.randomTrendingMovie = selectedTitle
+                self?.headerView?.configure(with: TitleViewModel(titleName: selectedTitle?.original_title ?? "", posterURL:  selectedTitle?.poster_path ?? ""))
+            case .failure(let error):
+                print(error.localizedDescription)
+            }
+        }
     }
     
     private func configureNavBar(){
@@ -72,6 +90,7 @@ extension HomeViewController: UITableViewDelegate,UITableViewDataSource{
                     return UITableViewCell()
                 }
                 
+        cell.delegate = self
 
                 switch indexPath.section {
                 case Sections.TrendingMovies.rawValue:
@@ -162,4 +181,16 @@ extension HomeViewController: UITableViewDelegate,UITableViewDataSource{
     
     
     
+}
+
+
+extension HomeViewController: CollectionViewTableViewCellDelegate {
+    func CollectionViewTableViewCellDidTapCell(_ cell: CollectionViewTableViewCell, viewModel: TitlePreviewViewModel) {
+        
+        DispatchQueue.main.async { [weak self] in  
+            let vc = TitlePreviewViewController()
+            vc.configure(with: viewModel)
+            self?.navigationController?.pushViewController(vc, animated: true)
+        }
+    }
 }

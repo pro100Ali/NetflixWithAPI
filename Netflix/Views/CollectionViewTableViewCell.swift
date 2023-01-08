@@ -7,6 +7,10 @@
 
 import UIKit
 
+protocol CollectionViewTableViewCellDelegate: AnyObject {
+    func  CollectionViewTableViewCellDidTapCell(_ cell: CollectionViewTableViewCell, viewModel: TitlePreviewViewModel)
+}
+
 class CollectionViewTableViewCell: UITableViewCell {
     
     private var titles:[Title] = [Title]()
@@ -14,6 +18,9 @@ class CollectionViewTableViewCell: UITableViewCell {
     
     
     static let identifier = "CollectionViewTableViewCell"
+    
+    
+    weak var delegate: CollectionViewTableViewCellDelegate?
     
     
     private let collectionView:UICollectionView = {
@@ -33,6 +40,7 @@ class CollectionViewTableViewCell: UITableViewCell {
         
         collectionView.delegate = self
         collectionView.dataSource = self
+        
     }
     
     required init?(coder: NSCoder) {
@@ -48,6 +56,20 @@ class CollectionViewTableViewCell: UITableViewCell {
         DispatchQueue.main.async {[weak self] in
             self?.collectionView.reloadData()
         }
+    }
+    
+    private func dowloadTitleAt(indexPath: [IndexPath]) {
+        
+        DataPersistentManager.shared.downloadTiteWith(model: titles[indexPath[0].row]) { result in
+            switch result {
+            case .success():
+                NotificationCenter.default.post(name: NSNotification.Name("downloaded"), object: nil)
+            case .failure(let error):
+                print(error.localizedDescription)
+            }
+        }
+        print("Dowloading \(titles[indexPath[0].row].original_title)")
+        
     }
 
 }
@@ -71,6 +93,43 @@ extension CollectionViewTableViewCell:UICollectionViewDataSource,UICollectionVie
         return titles.count
     }
     
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        collectionView.deselectItem(at: indexPath, animated: true)
+        
+        let title = titles[indexPath.row]
+        guard let titleName = title.original_title ?? title.original_title else { return }
+        
+        APICaller.shared.getMovies(with: titleName + " trailer") { [weak self]result in
+            switch result {
+            case .success(let videoElement):
+                    
+                
+                let title = self?.titles[indexPath.row]
+                
+                guard let titleOverview = title?.overview else {
+                return
+            }
+            guard let strongSelf = self else { return }
+                let viewModel = TitlePreviewViewModel(title: titleName, youtubeView: videoElement, titleOverview: titleOverview)
+            self?.delegate?.CollectionViewTableViewCellDidTapCell(strongSelf, viewModel: viewModel )
+            case .failure(let error):
+                print(error.localizedDescription)
+            }
+        }
+    }
     
+
     
+    func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemsAt indexPaths: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
+        
+        let config = UIContextMenuConfiguration(
+            identifier: nil, previewProvider: nil) { [weak self] _ in
+                let downloadAction = UIAction(title: "Download", subtitle: nil, image: nil, identifier: nil, discoverabilityTitle: nil, state: .off) { _ in
+                    self?.dowloadTitleAt(indexPath: indexPaths)
+                    print("Download tapped")
+                }
+                return UIMenu(title: "", image: nil, identifier: nil, options: .displayInline, children: [downloadAction])
+            }
+        return config
+    }
 }
